@@ -670,7 +670,8 @@ func (p *unauthToolsListProbe) Run(ctx context.Context, s probe.Session, r *repo
 	}
 
 	reqExch := raw.Exchange()
-	reqExch.Expected = "401/403 for an anonymous (no Authorization header) tools/list call"
+	if reqExch != nil {
+		reqExch.Expected = "401/403 for an anonymous (no Authorization header) tools/list call"
 
 	r.AddFinding(report.Finding{
 		ID:          p.ID(),
@@ -932,7 +933,9 @@ func (p *resourcesPromptsExposureProbe) Run(ctx context.Context, s probe.Session
 			continue
 		}
 		reqExch := raw.Exchange()
-		reqExch.Expected = "401/403 for an anonymous " + method + " call"
+		if reqExch != nil {
+			reqExch.Expected = "401/403 for an anonymous " + method + " call"
+		}
 		r.AddFinding(report.Finding{
 			ID:          p.ID() + "-" + strings.ReplaceAll(method, "/", "-"),
 			Title:       fmt.Sprintf("Unauthenticated %s returns %d item(s)", method, count),
