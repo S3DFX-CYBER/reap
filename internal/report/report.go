@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -125,10 +126,25 @@ func (e *HTTPExchange) curlArgs(live bool) string {
 // reproduction command. It never looks at Setup — a exchange that depended
 // on a prior handshake isn't reproducible as a single line; see ReproScript.
 func (e *HTTPExchange) Curl() string {
-	if e == nil {
+	if !e.reproducible() {
 		return ""
 	}
 	return "curl -s" + e.curlArgs(false)
+}
+
+// reproducible reports whether this exchange can be replayed as an HTTP
+// request. A transport with no per-message HTTP request (a WebSocket frame)
+// can still echo what it sent for evidence, but rendering that as a curl
+// invocation would be a fiction the operator cannot run.
+func (e *HTTPExchange) reproducible() bool {
+	if e == nil {
+		return false
+	}
+	u, err := url.Parse(e.URL)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
 }
 
 // ReproScript renders a copy-pasteable reproduction. For a standalone
@@ -139,7 +155,7 @@ func (e *HTTPExchange) Curl() string {
 // freshly-captured session ID rather than the one REAP originally observed,
 // which may already be expired.
 func (e *HTTPExchange) ReproScript() string {
-	if e == nil {
+	if !e.reproducible() {
 		return ""
 	}
 	if e.Setup == nil {

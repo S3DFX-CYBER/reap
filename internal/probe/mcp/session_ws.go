@@ -118,11 +118,19 @@ func (s *WSSession) Do(ctx context.Context, method string, params any, opts ...p
 		s.mu.Lock()
 		delete(s.pending, id)
 		s.mu.Unlock()
-		return &probe.RawResult{Err: err}, err
+		echo := &probe.RawResult{Err: err}
+		s.fillEcho(echo, body)
+		return echo, err
 	}
 
 	select {
 	case raw := <-respCh:
+		// Populate the request echo here, where the outgoing frame body is in
+		// scope. A WebSocket has no per-message HTTP request, so without this
+		// every finding raised over this transport carried no reproduction
+		// evidence at all — RawResult.Exchange() returns nil for an empty
+		// ReqMethod, by design.
+		s.fillEcho(raw, body)
 		if raw.Err != nil {
 			return raw, raw.Err
 		}
@@ -134,6 +142,22 @@ func (s *WSSession) Do(ctx context.Context, method string, params any, opts ...p
 		s.mu.Unlock()
 		return nil, ctx.Err()
 	}
+}
+
+// wsReqMethod marks an echo that came from a WebSocket frame rather than an
+// HTTP request, so report rendering knows not to offer it as a curl command.
+const wsReqMethod = "WS-FRAME"
+
+// fillEcho records what was actually sent for this frame, so a finding raised
+// over the WebSocket transport carries the same request-side evidence an HTTP
+// finding does.
+func (s *WSSession) fillEcho(raw *probe.RawResult, body []byte) {
+	if raw == nil {
+		return
+	}
+	raw.ReqMethod = wsReqMethod
+	raw.ReqURL = s.targetURL
+	raw.ReqBody = body
 }
 
 func (s *WSSession) runReader() {
